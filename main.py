@@ -2,6 +2,9 @@ import logging
 from enum import Enum
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
+import os
+from groq import Groq
+from dotenv import load_dotenv
 
 
 logging.basicConfig(
@@ -17,6 +20,10 @@ def common_api_token(api_token: str):
           logger.warning(f"Token inválido recebido: {api_token}")
           raise HTTPException(status_code=401, detail="Token inválido")
       return {"api_token": api_token}
+
+
+load_dotenv()
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 app = FastAPI(
       title="APIs da Aula — Felipe Piedade",
@@ -104,3 +111,23 @@ def operacao_matematica(numeros: Numeros, operacao: TipoOperacao):
               raise HTTPException(status_code=400, detail="Divisão por zero não permitida")
           resultado = numeros.numero1 / numeros.numero2
       return {"resultado": resultado}
+
+class Historia(BaseModel):
+      tema: str
+
+@app.post("/gerar_historia", tags=["IA Generativa"])
+def gerar_historia(historia: Historia):
+      logger.info(f"Gerando história sobre o tema: {historia.tema}")
+
+      prompt = f"Escreva uma história curta e envolvente sobre o tema: {historia.tema}"
+
+      chat_completion = client.chat.completions.create(
+          messages=[
+              {"role": "user", "content": prompt},
+          ],
+          model="llama-3.1-8b-instant",
+      )
+
+      historia_gerada = chat_completion.choices[0].message.content
+      logger.info("História gerada com sucesso")
+      return {"historia": historia_gerada}
