@@ -6,7 +6,7 @@ from models import (
     PedidosOutput,
     PeticaoInput,
 )
-from utils import execute_prompt_json, get_logger
+from utils import RESPOSTAS_PROTEGIDAS, execute_prompt_json, get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/juridico", tags=["Jurídico"])
@@ -26,6 +26,10 @@ AREAS_VALIDAS = ", ".join(a.value for a in AreaJuridica)
     ),
     response_model=ClassificacaoOutput,
     status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Classificação realizada com sucesso"},
+        **RESPOSTAS_PROTEGIDAS,
+    },
 )
 def classificar_peticao(peticao: PeticaoInput) -> ClassificacaoOutput:
     """Classifica a petição usando a LLM e valida a área retornada."""
@@ -76,6 +80,10 @@ def classificar_peticao(peticao: PeticaoInput) -> ClassificacaoOutput:
     ),
     response_model=PedidosOutput,
     status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Pedidos extraídos com sucesso"},
+        **RESPOSTAS_PROTEGIDAS,
+    },
 )
 def extrair_pedidos(peticao: PeticaoInput) -> PedidosOutput:
     """Extrai os pedidos da petição usando a LLM."""

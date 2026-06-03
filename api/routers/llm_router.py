@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from models import Historia, HistoriaResposta
-from utils import execute_prompt, get_logger
+from utils import RESPOSTAS_PROTEGIDAS, execute_prompt, get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/llm", tags=["IA Generativa"])
@@ -16,6 +16,10 @@ router = APIRouter(prefix="/llm", tags=["IA Generativa"])
     ),
     response_model=HistoriaResposta,
     deprecated=True,
+    responses={
+        200: {"description": "História gerada com sucesso"},
+        **RESPOSTAS_PROTEGIDAS,
+    },
 )
 def gerar_historia(historia: Historia) -> HistoriaResposta:
     """Gera uma história a partir do tema usando Groq + Llama 3.1."""

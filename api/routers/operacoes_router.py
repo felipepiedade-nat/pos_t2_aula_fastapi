@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status
 
 from models import Numeros, Resultado, TipoOperacao
-from utils import get_logger
+from utils import RESPOSTAS_PROTEGIDAS, get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/operacoes", tags=["Operações Matemáticas"])
@@ -12,6 +12,10 @@ router = APIRouter(prefix="/operacoes", tags=["Operações Matemáticas"])
     deprecated=True,
     summary="[DEPRECATED] Soma via path params — será descontinuado em 15/06",
     response_model=Resultado,
+    responses={
+        200: {"description": "Soma calculada com sucesso"},
+        **RESPOSTAS_PROTEGIDAS,
+    },
 )
 def soma_v1(numero1: int, numero2: int) -> Resultado:
     """Soma dois números recebidos pela URL (formato legado)."""
@@ -22,6 +26,10 @@ def soma_v1(numero1: int, numero2: int) -> Resultado:
     "/soma/v2",
     summary="Soma via query params",
     response_model=Resultado,
+    responses={
+        200: {"description": "Soma calculada com sucesso"},
+        **RESPOSTAS_PROTEGIDAS,
+    },
 )
 def soma_v2(numero1: int, numero2: int) -> Resultado:
     """Soma dois números recebidos como query parameters."""
@@ -35,6 +43,11 @@ def soma_v2(numero1: int, numero2: int) -> Resultado:
     response_description="Soma calculada com sucesso",
     status_code=status.HTTP_201_CREATED,
     response_model=Resultado,
+    responses={
+        201: {"description": "Soma calculada com sucesso"},
+        400: {"description": "Números negativos não são aceitos"},
+        **RESPOSTAS_PROTEGIDAS,
+    },
 )
 def soma_v3(numeros: Numeros) -> Resultado:
     """Soma dois números enviados como JSON, validando que sejam não-negativos."""
@@ -53,6 +66,11 @@ def soma_v3(numeros: Numeros) -> Resultado:
     "/operacao_matematica",
     summary="Operação matemática genérica (soma, subtração, multiplicação, divisão)",
     response_model=Resultado,
+    responses={
+        200: {"description": "Operação realizada com sucesso"},
+        400: {"description": "Divisão por zero não permitida"},
+        **RESPOSTAS_PROTEGIDAS,
+    },
 )
 def operacao_matematica(numeros: Numeros, operacao: TipoOperacao) -> Resultado:
     """Aplica a operação selecionada via Enum sobre dois números."""
