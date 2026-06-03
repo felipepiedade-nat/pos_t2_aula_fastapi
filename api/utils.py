@@ -1,3 +1,4 @@
+import json
 import logging
 import logging.config
 import os
@@ -122,3 +123,33 @@ def execute_prompt(prompt: str, model: str = "llama-3.1-8b-instant") -> str:
         messages=[{"role": "user", "content": prompt}],
     )
     return response.choices[0].message.content
+
+
+def execute_prompt_json(prompt: str, model: str = "llama-3.1-8b-instant") -> dict:
+    """Pede à LLM uma resposta em JSON estruturado e devolve já parseado.
+
+    Usa ``response_format={"type": "json_object"}`` da Groq, que força o
+    modelo a emitir JSON sintaticamente válido. Em caso de erro de parse
+    (raro mas possível), levanta ``HTTPException`` 500.
+
+    Args:
+        prompt: instrução; deve indicar explicitamente o schema esperado.
+        model: identificador do modelo Groq.
+
+    Returns:
+        dict: payload JSON já parseado em estrutura Python.
+    """
+    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        response_format={"type": "json_object"},
+    )
+    conteudo = response.choices[0].message.content
+    try:
+        return json.loads(conteudo)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"LLM devolveu JSON inválido: {exc}",
+        )
