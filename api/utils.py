@@ -2,8 +2,10 @@ import json
 import logging
 import logging.config
 import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import jwt
 from dotenv import find_dotenv, load_dotenv
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -11,7 +13,15 @@ from groq import Groq
 
 load_dotenv(find_dotenv())
 
-API_INLINE_TOKEN = os.getenv("API_TOKEN")
+JWT_SECRET = os.getenv("JWT_SECRET", "")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRA_SEGUNDOS = int(os.getenv("JWT_EXPIRA_SEGUNDOS", "3600"))
+
+USUARIOS = {
+    "felipe": "senha_felipe_123",
+    "professor": "senha_prof_456",
+    "edson": "senha_edson_789",
+}
 
 LOGS_DIR = Path(__file__).resolve().parent.parent / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
@@ -74,37 +84,93 @@ def get_logger(nome: str = __name__) -> logging.Logger:
     return logging.getLogger(nome)
 
 
+def autenticar_usuario(usuario: str, senha: str) -> bool:
+    """Confere se o par usuário/senha existe em ``USUARIOS``.
+
+    Args:
+        usuario: nome de usuário enviado no login.
+        senha: senha enviada no login.
+
+    Returns:
+        bool: True se as credenciais batem, False caso contrário.
+    """
+    return USUARIOS.get(usuario) == senha
+
+
+def criar_jwt(usuario: str) -> tuple[str, int]:
+    """Gera um JWT assinado para o usuário, com expiração em segundos.
+
+    Args:
+        usuario: nome de usuário a ser embutido no claim ``sub``.
+
+    Returns:
+        tuple: (token_jwt, expira_em_segundos).
+    """
+    agora = datetime.now(tz=timezone.utc)
+    expira = agora + timedelta(seconds=JWT_EXPIRA_SEGUNDOS)
+    payload = {
+        "sub": usuario,
+        "iat": int(agora.timestamp()),
+        "exp": int(expira.timestamp()),
+    }
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return token, JWT_EXPIRA_SEGUNDOS
+
+
 security_scheme = HTTPBearer(
     scheme_name="BearerAuth",
-    description="Autenticação via header Authorization: Bearer <token>",
+    description="Autenticação via header Authorization: Bearer <JWT>",
 )
 
 
-def verify_api_token(
+RESPOSTAS_PROTEGIDAS = {
+    401: {"description": "Token Bearer ausente, inválido ou expirado"},
+    422: {"description": "Payload inválido (validação Pydantic)"},
+    500: {"description": "Erro interno do servidor — ver logs/erros.log"},
+}
+
+
+def verify_jwt_token(
     credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
 ) -> dict:
-    """Verifica se o Bearer Token enviado bate com ``API_TOKEN`` do ``.env``.
+    """Valida o JWT enviado no header ``Authorization: Bearer <token>``.
 
     Args:
-        credentials: credenciais extraídas do header ``Authorization`` pelo
-            FastAPI via ``HTTPBearer``.
+        credentials: credenciais extraídas pelo ``HTTPBearer``.
 
     Raises:
-        HTTPException: status 401 quando o token está ausente ou inválido.
+        HTTPException 401: token ausente, inválido ou expirado.
 
     Returns:
-        dict: payload simbólico para reuso futuro via ``Depends``.
+        dict: payload do JWT (inclui ``sub`` com o nome do usuário).
     """
     logger = get_logger(__name__)
-    if credentials is None or credentials.credentials != API_INLINE_TOKEN:
-        token_recebido = credentials.credentials if credentials else None
-        logger.warning(f"Tentativa de acesso com token inválido: {token_recebido!r}")
+    if credentials is None:
+        logger.warning("Tentativa de acesso sem header Authorization")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token de autenticação inválido ou ausente",
+            detail="Token Bearer ausente",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return {"token": credentials.credentials}
+    try:
+        payload = jwt.decode(
+            credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM]
+        )
+    except jwt.ExpiredSignatureError:
+        logger.warning("Tentativa de acesso com token expirado")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expirado — faça login novamente",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.InvalidTokenError as exc:
+        logger.warning(f"Tentativa de acesso com token inválido: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return payload
 
 
 def execute_prompt(prompt: str, model: str = "llama-3.1-8b-instant") -> str:

@@ -3,6 +3,40 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 
+class LoginInput(BaseModel):
+    """Credenciais de usuário para gerar um JWT."""
+
+    usuario: str = Field(
+        ...,
+        min_length=3,
+        max_length=50,
+        description="Nome de usuário cadastrado",
+        examples=["felipe"],
+    )
+    senha: str = Field(
+        ...,
+        min_length=4,
+        max_length=100,
+        description="Senha do usuário",
+        examples=["minha_senha_segura"],
+    )
+
+
+class TokenResposta(BaseModel):
+    """Resposta do endpoint de login com o JWT emitido."""
+
+    access_token: str = Field(..., description="JWT assinado pelo servidor")
+    token_type: str = Field(
+        default="bearer",
+        description="Tipo do token (sempre 'bearer' no padrão OAuth2)",
+    )
+    expira_em: int = Field(
+        ...,
+        description="Tempo de vida do token em segundos",
+        examples=[3600],
+    )
+
+
 class Numeros(BaseModel):
     numero1: int = Field(..., description="Primeiro número da operação", examples=[5])
     numero2: int = Field(..., description="Segundo número da operação", examples=[3])

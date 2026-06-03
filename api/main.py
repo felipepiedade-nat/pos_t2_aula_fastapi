@@ -2,10 +2,11 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from routers.auth_router import router as auth_router
 from routers.juridico_router import router as juridico_router
 from routers.llm_router import router as llm_router
 from routers.operacoes_router import router as operacoes_router
-from utils import configurar_logs, get_logger, verify_api_token
+from utils import configurar_logs, get_logger, verify_jwt_token
 
 configurar_logs()
 logger = get_logger(__name__)
@@ -32,8 +33,13 @@ app = FastAPI(
 
 ### Autenticação
 
-Todos os endpoints sob `/api/v1/` exigem **Bearer Token** no header
-`Authorization: Bearer <token>`. Use o botão **Authorize** no Swagger.
+1. Faça login em **`POST /api/v1/auth/token`** com `usuario` e `senha`.
+2. Copie o `access_token` retornado.
+3. Clique em **Authorize** no Swagger e cole o token.
+4. Todos os endpoints sob `/api/v1/` (exceto `/auth/token`) passam a aceitar
+   o header `Authorization: Bearer <JWT>` automaticamente.
+
+O JWT expira em 1h (configurável em `JWT_EXPIRA_SEGUNDOS`).
 
 ### Sobre o autor
 
@@ -107,18 +113,19 @@ def hello_world() -> dict:
     return {"message": "hello world"}
 
 
+app.include_router(auth_router, prefix="/api/v1")
 app.include_router(
     juridico_router,
     prefix="/api/v1",
-    dependencies=[Depends(verify_api_token)],
+    dependencies=[Depends(verify_jwt_token)],
 )
 app.include_router(
     operacoes_router,
     prefix="/api/v1",
-    dependencies=[Depends(verify_api_token)],
+    dependencies=[Depends(verify_jwt_token)],
 )
 app.include_router(
     llm_router,
     prefix="/api/v1",
-    dependencies=[Depends(verify_api_token)],
+    dependencies=[Depends(verify_jwt_token)],
 )
