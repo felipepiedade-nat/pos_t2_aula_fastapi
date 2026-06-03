@@ -3,12 +3,12 @@ from fastapi import APIRouter
 from models import Historia, HistoriaResposta
 from utils import execute_prompt, get_logger
 
-logger = get_logger()
+logger = get_logger(__name__)
 router = APIRouter(prefix="/llm", tags=["IA Generativa"])
 
 
 @router.post(
-    "/v1/gerar_historia",
+    "/gerar_historia",
     summary="Gera uma história curta sobre o tema informado",
     response_model=HistoriaResposta,
 )

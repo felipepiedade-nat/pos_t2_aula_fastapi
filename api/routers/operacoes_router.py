@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, status
 from models import Numeros, Resultado, TipoOperacao
 from utils import get_logger
 
-logger = get_logger()
+logger = get_logger(__name__)
 router = APIRouter(prefix="/operacoes", tags=["Operações Matemáticas"])
 
 
