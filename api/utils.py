@@ -11,7 +11,7 @@ from docx import Document
 from dotenv import find_dotenv, load_dotenv
 from fastapi import Depends, HTTPException, UploadFile, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from groq import Groq
+from groq import APIStatusError, Groq
 from pypdf import PdfReader
 
 load_dotenv(find_dotenv())
@@ -149,7 +149,11 @@ security_scheme = HTTPBearer(
 RESPOSTAS_PROTEGIDAS = {
     401: {"description": "Token Bearer ausente, inválido ou expirado"},
     422: {"description": "Payload inválido (validação Pydantic)"},
+    429: {
+        "description": "Limite de tokens/minuto da Groq excedido — aguarde e tente novamente"
+    },
     500: {"description": "Erro interno do servidor — ver logs/erros.log"},
+    502: {"description": "Provedor da LLM (Groq) devolveu erro"},
 }
 
 
@@ -199,7 +203,9 @@ def verify_jwt_token(
 UPLOAD_TAMANHO_MAX_MB = 5
 UPLOAD_TAMANHO_MAX_BYTES = UPLOAD_TAMANHO_MAX_MB * 1024 * 1024
 UPLOAD_PAGINAS_MAX = 50
-UPLOAD_CHARS_MAX = 20_000
+# 12k chars (~4k tokens) deixa folga dentro do limite TPM gratuito da
+# Groq de 6000 tokens/min para llama-3.1-8b-instant (prompt + resposta).
+UPLOAD_CHARS_MAX = 12_000
 UPLOAD_CHARS_MIN = 50
 
 
@@ -343,22 +349,51 @@ def execute_prompt_json(prompt: str, model: str = "llama-3.1-8b-instant") -> dic
     """Pede à LLM uma resposta em JSON estruturado e devolve já parseado.
 
     Usa ``response_format={"type": "json_object"}`` da Groq, que força o
-    modelo a emitir JSON sintaticamente válido. Em caso de erro de parse
-    (raro mas possível), levanta ``HTTPException`` 500.
+    modelo a emitir JSON sintaticamente válido. Captura erros HTTP do
+    provedor (rate limit, indisponibilidade) e os traduz para códigos
+    HTTP adequados na resposta da nossa API.
 
     Args:
         prompt: instrução; deve indicar explicitamente o schema esperado.
         model: identificador do modelo Groq.
 
+    Raises:
+        HTTPException 429: limite de tokens/minuto da Groq excedido.
+        HTTPException 502: Groq devolveu erro de outro tipo.
+        HTTPException 500: LLM devolveu JSON inválido.
+
     Returns:
         dict: payload JSON já parseado em estrutura Python.
     """
+    logger = get_logger(__name__)
     client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        response_format={"type": "json_object"},
-    )
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+        )
+    except APIStatusError as exc:
+        codigo_groq = getattr(exc, "code", None) or ""
+        if exc.status_code == 429 or "rate_limit" in codigo_groq:
+            logger.warning(
+                f"Groq rejeitou requisição por rate limit (status {exc.status_code})"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    "Limite de tokens por minuto da Groq atingido. "
+                    "Tente novamente em alguns segundos ou envie um documento "
+                    "menor. Plano gratuito limita 6000 tokens/min no "
+                    "llama-3.1-8b-instant."
+                ),
+            )
+        logger.error(f"Groq devolveu erro {exc.status_code}: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Provedor da LLM (Groq) devolveu erro {exc.status_code}",
+        )
+
     conteudo = response.choices[0].message.content
     try:
         return json.loads(conteudo)
