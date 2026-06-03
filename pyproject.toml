@@ -1,10 +1,16 @@
 [project]
 name = "pos-t2-aula-fastapi"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.2.0"
+description = "API educacional da disciplina Construção de APIs para IA (UFG-CEIA)"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]>=0.136.3",
     "groq>=1.2.0",
+    "python-dotenv>=1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6.0",
 ]
