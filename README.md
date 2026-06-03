@@ -70,15 +70,35 @@ Todos usam **Groq + Llama 3.1** com `response_format=json_object` para garantir 
    uv sync
    ```
 
-3. Crie um arquivo `.env` a partir do `.env.sample` e preencha:
+3. Crie um arquivo `.env` a partir do `.env.sample` e preencha as variáveis conforme a seção [Configurando variáveis de ambiente](#configurando-variáveis-de-ambiente) abaixo.
 
-   ```env
-   GROQ_API_KEY=gsk_sua_chave_groq_aqui
-   JWT_SECRET=string_aleatoria_de_no_minimo_32_caracteres
-   JWT_EXPIRA_SEGUNDOS=3600
-   ```
+## Configurando variáveis de ambiente
 
-   > 💡 **`JWT_SECRET`**: use qualquer string longa e imprevisível. Em produção, gerar com `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+A aplicação lê três variáveis do arquivo `.env`:
+
+### `GROQ_API_KEY` (obrigatório)
+
+Chave gratuita do Groq, provedor da LLM usada na classificação e extração. Cadastre em <https://console.groq.com/keys> → **Create API Key** → copie e cole como valor.
+
+### `JWT_SECRET` (obrigatório)
+
+Chave secreta usada pela API para **assinar criptograficamente** os tokens JWT emitidos no login. Cada desenvolvedor que rodar o projeto deve gerar **uma string aleatória própria, com no mínimo 32 caracteres**.
+
+Para gerar uma chave segura, rode no PowerShell:
+
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Copie a saída e cole como valor de `JWT_SECRET`.
+
+> ⚠️ **Se `JWT_SECRET` ou `GROQ_API_KEY` faltarem** (ou estiverem vazios), a aplicação **não sobe** e exibe mensagem clara apontando qual variável está ausente. Validação acontece na inicialização (fail-fast).
+
+> 🛡️ **Nunca compartilhe** seu `JWT_SECRET` nem o commite no Git. Quem tem essa chave consegue forjar tokens válidos da sua API, como se fosse qualquer usuário cadastrado.
+
+### `JWT_EXPIRA_SEGUNDOS` (opcional)
+
+Tempo de vida dos JWTs emitidos no login. Default: `3600` (1 hora). Pode reduzir para 300 (5 min) em testes, ou aumentar conforme a sensibilidade do caso de uso.
 
 ## Usuários cadastrados (didático)
 
