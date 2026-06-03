@@ -9,8 +9,13 @@ router = APIRouter(prefix="/llm", tags=["IA Generativa"])
 
 @router.post(
     "/gerar_historia",
-    summary="Gera uma história curta sobre o tema informado",
+    summary="[DEPRECATED — Aula 2] Gera uma história curta sobre o tema informado",
+    description=(
+        "Endpoint mantido como demonstração da Aula 2. Os endpoints "
+        "avaliados no trabalho final são os de `/juridico/`."
+    ),
     response_model=HistoriaResposta,
+    deprecated=True,
 )
 def gerar_historia(historia: Historia) -> HistoriaResposta:
     """Gera uma história a partir do tema usando Groq + Llama 3.1."""
