@@ -3,7 +3,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from routers.auth_router import router as auth_router
-from routers.juridico_router import router as juridico_router
+from routers.juridico_router import router_v1 as juridico_router_v1
+from routers.juridico_router import router_v2 as juridico_router_v2
 from routers.llm_router import router as llm_router
 from routers.operacoes_router import router as operacoes_router
 from utils import configurar_logs, get_logger, verify_jwt_token
@@ -20,10 +21,17 @@ app = FastAPI(
 
 ### Endpoints de IA avaliados no trabalho final
 
-- `POST /api/v1/juridico/classificar_peticao` — classifica uma petição
-  por área do Direito (Enum com 15 valores)
-- `POST /api/v1/juridico/extrair_pedidos` — extrai a lista objetiva
-  de pedidos formulados na petição
+**v1 — texto colado (JSON):**
+
+- `POST /api/v1/juridico/classificar_peticao` — classifica em 1 das 15 áreas do Direito
+- `POST /api/v1/juridico/extrair_pedidos` — lista objetiva dos pedidos
+
+**v2 — upload de arquivo PDF/DOCX (multipart/form-data):**
+
+- `POST /api/v2/juridico/classificar_peticao` — mesma classificação, mas a partir do arquivo
+- `POST /api/v2/juridico/extrair_pedidos` — mesma extração, mas a partir do arquivo
+
+Limites do v2: 5 MB, 50 páginas, 50–20.000 caracteres extraídos.
 
 ### Endpoints de apoio (Aula 2)
 
@@ -115,8 +123,13 @@ def hello_world() -> dict:
 
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(
-    juridico_router,
+    juridico_router_v1,
     prefix="/api/v1",
+    dependencies=[Depends(verify_jwt_token)],
+)
+app.include_router(
+    juridico_router_v2,
+    prefix="/api/v2",
     dependencies=[Depends(verify_jwt_token)],
 )
 app.include_router(

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, File, HTTPException, UploadFile, status
 
 from models import (
     AreaJuridica,
@@ -6,35 +6,24 @@ from models import (
     PedidosOutput,
     PeticaoInput,
 )
-from utils import RESPOSTAS_PROTEGIDAS, execute_prompt_json, get_logger
+from utils import (
+    RESPOSTAS_PROTEGIDAS,
+    execute_prompt_json,
+    extrair_texto_arquivo,
+    get_logger,
+)
 
 logger = get_logger(__name__)
-router = APIRouter(prefix="/juridico", tags=["Jurídico"])
+
+router_v1 = APIRouter(prefix="/juridico", tags=["Jurídico v1 (texto)"])
+router_v2 = APIRouter(prefix="/juridico", tags=["Jurídico v2 (arquivo)"])
 
 
 AREAS_VALIDAS = ", ".join(a.value for a in AreaJuridica)
 
 
-@router.post(
-    "/classificar_peticao",
-    summary="Classifica uma petição por área do Direito",
-    description=(
-        "Recebe o texto de uma petição inicial (ou trecho dela) e usa uma LLM "
-        "para identificar a área do Direito predominante. Devolve o rótulo da "
-        "área (valor fechado do Enum AreaJuridica) e uma justificativa em "
-        "linguagem natural com os termos que motivaram a classificação."
-    ),
-    response_model=ClassificacaoOutput,
-    status_code=status.HTTP_200_OK,
-    responses={
-        200: {"description": "Classificação realizada com sucesso"},
-        **RESPOSTAS_PROTEGIDAS,
-    },
-)
-def classificar_peticao(peticao: PeticaoInput) -> ClassificacaoOutput:
-    """Classifica a petição usando a LLM e valida a área retornada."""
-    logger.info(f"Classificando petição ({len(peticao.texto)} caracteres)")
-
+def _classificar(texto: str) -> ClassificacaoOutput:
+    """Classifica o texto da petição via LLM e devolve o resultado tipado."""
     prompt = (
         "Você é um assistente especialista em Direito brasileiro. "
         "Sua tarefa é classificar a petição abaixo em uma das áreas do "
@@ -44,11 +33,10 @@ def classificar_peticao(peticao: PeticaoInput) -> ClassificacaoOutput:
         'use "outra". Não invente novas áreas.\n\n'
         "Responda APENAS com um objeto JSON com este formato exato:\n"
         '{"area": "<uma das áreas válidas>", "justificativa": "<2 a 4 frases citando termos do texto>"}\n\n'
-        f"Texto da petição:\n---\n{peticao.texto}\n---"
+        f"Texto da petição:\n---\n{texto}\n---"
     )
 
     resposta = execute_prompt_json(prompt)
-
     area_bruta = resposta.get("area", "").strip().lower()
     justificativa = resposta.get("justificativa", "").strip()
 
@@ -70,25 +58,8 @@ def classificar_peticao(peticao: PeticaoInput) -> ClassificacaoOutput:
     return ClassificacaoOutput(area=area, justificativa=justificativa)
 
 
-@router.post(
-    "/extrair_pedidos",
-    summary="Extrai a lista de pedidos de uma petição",
-    description=(
-        "Recebe o texto de uma petição inicial e devolve a lista objetiva "
-        "dos pedidos formulados pelo autor ao juiz. Cada pedido vira um item "
-        "da lista, em linguagem direta e sem ritual cartorário."
-    ),
-    response_model=PedidosOutput,
-    status_code=status.HTTP_200_OK,
-    responses={
-        200: {"description": "Pedidos extraídos com sucesso"},
-        **RESPOSTAS_PROTEGIDAS,
-    },
-)
-def extrair_pedidos(peticao: PeticaoInput) -> PedidosOutput:
-    """Extrai os pedidos da petição usando a LLM."""
-    logger.info(f"Extraindo pedidos de petição ({len(peticao.texto)} caracteres)")
-
+def _extrair_pedidos(texto: str) -> PedidosOutput:
+    """Extrai os pedidos do texto da petição via LLM."""
     prompt = (
         "Você é um assistente especialista em Direito brasileiro. "
         "Sua tarefa é extrair a lista de pedidos que o autor faz ao juiz "
@@ -101,11 +72,10 @@ def extrair_pedidos(peticao: PeticaoInput) -> PedidosOutput:
         "- Se não houver pedido identificável, devolva lista vazia.\n\n"
         "Responda APENAS com um objeto JSON com este formato exato:\n"
         '{"pedidos": ["pedido 1", "pedido 2", ...]}\n\n'
-        f"Texto da petição:\n---\n{peticao.texto}\n---"
+        f"Texto da petição:\n---\n{texto}\n---"
     )
 
     resposta = execute_prompt_json(prompt)
-
     pedidos_bruto = resposta.get("pedidos", [])
     if not isinstance(pedidos_bruto, list):
         raise HTTPException(
@@ -114,6 +84,96 @@ def extrair_pedidos(peticao: PeticaoInput) -> PedidosOutput:
         )
 
     pedidos = [str(p).strip() for p in pedidos_bruto if str(p).strip()]
-
     logger.info(f"Pedidos extraídos: {len(pedidos)}")
     return PedidosOutput(quantidade_pedidos=len(pedidos), pedidos=pedidos)
+
+
+@router_v1.post(
+    "/classificar_peticao",
+    summary="Classifica uma petição por área do Direito (texto colado)",
+    description=(
+        "Recebe o texto de uma petição inicial em JSON e devolve a área do "
+        "Direito predominante (Enum AreaJuridica) + justificativa."
+    ),
+    response_model=ClassificacaoOutput,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Classificação realizada com sucesso"},
+        **RESPOSTAS_PROTEGIDAS,
+    },
+)
+def classificar_peticao_texto(peticao: PeticaoInput) -> ClassificacaoOutput:
+    """Endpoint v1: recebe texto colado, classifica."""
+    logger.info(f"v1 classificar_peticao - {len(peticao.texto)} chars")
+    return _classificar(peticao.texto)
+
+
+@router_v1.post(
+    "/extrair_pedidos",
+    summary="Extrai a lista de pedidos de uma petição (texto colado)",
+    description=(
+        "Recebe o texto de uma petição inicial em JSON e devolve a lista "
+        "objetiva dos pedidos formulados ao juiz."
+    ),
+    response_model=PedidosOutput,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Pedidos extraídos com sucesso"},
+        **RESPOSTAS_PROTEGIDAS,
+    },
+)
+def extrair_pedidos_texto(peticao: PeticaoInput) -> PedidosOutput:
+    """Endpoint v1: recebe texto colado, extrai pedidos."""
+    logger.info(f"v1 extrair_pedidos - {len(peticao.texto)} chars")
+    return _extrair_pedidos(peticao.texto)
+
+
+@router_v2.post(
+    "/classificar_peticao",
+    summary="Classifica uma petição por área do Direito (upload PDF ou DOCX)",
+    description=(
+        "Recebe o arquivo da petição (.pdf ou .docx) via multipart/form-data, "
+        "extrai o texto e classifica em uma das 15 áreas do Direito.\n\n"
+        "Limites: 5 MB por arquivo, 50 páginas (PDF), entre 50 e 20.000 caracteres "
+        "extraídos. PDFs escaneados (imagem, sem texto extraível) são rejeitados com 422."
+    ),
+    response_model=ClassificacaoOutput,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Classificação realizada com sucesso"},
+        413: {"description": "Arquivo excede 5 MB"},
+        **RESPOSTAS_PROTEGIDAS,
+    },
+)
+async def classificar_peticao_arquivo(
+    arquivo: UploadFile = File(..., description="Petição em .pdf ou .docx"),
+) -> ClassificacaoOutput:
+    """Endpoint v2: recebe upload do arquivo, extrai texto, classifica."""
+    logger.info(f"v2 classificar_peticao - arquivo: {arquivo.filename}")
+    texto = await extrair_texto_arquivo(arquivo)
+    return _classificar(texto)
+
+
+@router_v2.post(
+    "/extrair_pedidos",
+    summary="Extrai a lista de pedidos de uma petição (upload PDF ou DOCX)",
+    description=(
+        "Recebe o arquivo da petição (.pdf ou .docx) via multipart/form-data, "
+        "extrai o texto e devolve a lista objetiva dos pedidos formulados.\n\n"
+        "Limites: 5 MB por arquivo, 50 páginas (PDF), entre 50 e 20.000 caracteres extraídos."
+    ),
+    response_model=PedidosOutput,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Pedidos extraídos com sucesso"},
+        413: {"description": "Arquivo excede 5 MB"},
+        **RESPOSTAS_PROTEGIDAS,
+    },
+)
+async def extrair_pedidos_arquivo(
+    arquivo: UploadFile = File(..., description="Petição em .pdf ou .docx"),
+) -> PedidosOutput:
+    """Endpoint v2: recebe upload do arquivo, extrai texto, extrai pedidos."""
+    logger.info(f"v2 extrair_pedidos - arquivo: {arquivo.filename}")
+    texto = await extrair_texto_arquivo(arquivo)
+    return _extrair_pedidos(texto)
