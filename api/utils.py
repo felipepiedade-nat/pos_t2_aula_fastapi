@@ -18,9 +18,8 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRA_SEGUNDOS = int(os.getenv("JWT_EXPIRA_SEGUNDOS", "3600"))
 
 USUARIOS = {
-    "felipe": "senha_felipe_123",
-    "professor": "senha_prof_456",
-    "edson": "senha_edson_789",
+    "felipe": "123456",
+    "rogerio": "123456",
 }
 
 LOGS_DIR = Path(__file__).resolve().parent.parent / "logs"

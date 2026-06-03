@@ -74,9 +74,8 @@ Os usuários e senhas estão **hardcoded** em `api/utils.py` para fins didático
 
 | Usuário | Senha |
 |---|---|
-| `felipe` | `senha_felipe_123` |
-| `professor` | `senha_prof_456` |
-| `edson` | `senha_edson_789` |
+| `felipe` | `123456` |
+| `rogerio` | `123456` |
 
 > ⚠️ **Em produção**, essa lista viria de um banco de dados com senhas hasheadas (bcrypt/argon2). Aqui é didático para que o avaliador possa testar sem cadastro.
 
@@ -106,7 +105,7 @@ A aplicação fica disponível em:
    ```json
    {
      "usuario": "felipe",
-     "senha": "senha_felipe_123"
+     "senha": "123456"
    }
    ```
 4. **Execute**. Copie o `access_token` retornado (string enorme começando com `eyJ...`).
@@ -123,7 +122,7 @@ A aplicação fica disponível em:
 ```powershell
 $resposta = curl.exe -s -X POST "http://127.0.0.1:8000/api/v1/auth/token" `
   -H "Content-Type: application/json" `
-  -d '{"usuario": "felipe", "senha": "senha_felipe_123"}'
+  -d '{"usuario": "felipe", "senha": "123456"}'
 
 $token = ($resposta | ConvertFrom-Json).access_token
 ```
