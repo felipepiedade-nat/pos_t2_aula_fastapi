@@ -20,7 +20,21 @@ Cada operação (classificar e extrair) tem **duas versões coexistindo**, demon
 - `POST /api/v2/juridico/classificar_peticao` — mesma classificação, a partir do arquivo
 - `POST /api/v2/juridico/extrair_pedidos` — mesma extração, a partir do arquivo
 
-Limites do v2: **5 MB** por arquivo, **50 páginas** (PDF), entre **50 e 20.000 caracteres** extraídos. PDFs escaneados (imagem, sem texto extraível) são rejeitados com 422.
+Limites do v2: **5 MB** por arquivo, **50 páginas** (PDF), entre **50 e 12.000 caracteres** extraídos. Textos maiores são truncados em 12.000 caracteres para caber no limite de tokens/min do plano gratuito da Groq. PDFs escaneados (imagem, sem texto extraível) são rejeitados com 422.
+
+### Limites da Groq (plano gratuito)
+
+A API usa o modelo **`llama-3.1-8b-instant`** pela Groq, no plano **gratuito** (`on_demand` tier):
+
+- **6.000 tokens por minuto** (TPM) — soma de prompt + resposta
+- ~3 caracteres por token em português
+- Por isso o limite de 12.000 caracteres extraídos por upload — deixa folga para o prompt + resposta caberem nos 6.000 TPM
+
+Se receber HTTP **429** com mensagem de rate limit:
+
+1. Aguarde 60 segundos e tente novamente, ou
+2. Envie um documento menor, ou
+3. Migre para o Dev Tier pago em <https://console.groq.com/settings/billing> para limite maior.
 
 Todos usam **Groq + Llama 3.1** com `response_format=json_object` para garantir saída JSON sintaticamente válida.
 
@@ -258,7 +272,9 @@ curl.exe -X POST "http://127.0.0.1:8000/api/v2/juridico/classificar_peticao" `
 | 401 | Unauthorized | JWT ausente, inválido ou expirado |
 | 413 | Payload Too Large | Arquivo enviado no v2 excede 5 MB |
 | 422 | Unprocessable Entity | Validação Pydantic, extensão não suportada, PDF sem texto, arquivo vazio |
+| 429 | Too Many Requests | Limite de tokens/minuto da Groq atingido — aguarde alguns segundos |
 | 500 | Internal Server Error | Erro inesperado — sempre registrado em `logs/erros.log` |
+| 502 | Bad Gateway | Groq indisponível ou devolveu erro inesperado |
 
 Cada endpoint declara explicitamente seus códigos de resposta via `responses={...}` no decorator, e o Swagger renderiza todos com descrição.
 
