@@ -2,6 +2,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from routers.juridico_router import router as juridico_router
 from routers.llm_router import router as llm_router
 from routers.operacoes_router import router as operacoes_router
 from utils import configurar_logs, get_logger, verify_api_token
@@ -16,11 +17,18 @@ app = FastAPI(
     description="""
 **API educacional** desenvolvida na disciplina **Construção de APIs para IA**.
 
-Endpoints disponíveis:
+### Endpoints de IA avaliados no trabalho final
+
+- `POST /api/v1/juridico/classificar_peticao` — classifica uma petição
+  por área do Direito (Enum com 15 valores)
+- `POST /api/v1/juridico/extrair_pedidos` — extrai a lista objetiva
+  de pedidos formulados na petição
+
+### Endpoints de apoio (Aula 2)
 
 - Operações matemáticas em 3 formatos (path params, query params, Pydantic)
 - Operação matemática genérica via `Enum`
-- Geração de história usando LLM (Groq + Llama 3.1)
+- `gerar_historia` mantido como `deprecated` para fins didáticos
 
 ### Autenticação
 
@@ -99,6 +107,11 @@ def hello_world() -> dict:
     return {"message": "hello world"}
 
 
+app.include_router(
+    juridico_router,
+    prefix="/api/v1",
+    dependencies=[Depends(verify_api_token)],
+)
 app.include_router(
     operacoes_router,
     prefix="/api/v1",
