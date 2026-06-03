@@ -13,6 +13,10 @@ API educacional desenvolvida na disciplina **Construção de APIs para IA** da P
 
 Ambos usam **Groq + Llama 3.1** com `response_format=json_object` para garantir saída JSON sintaticamente válida.
 
+### Endpoint de autenticação
+
+- **`POST /api/v1/auth/token`** — recebe `usuario` e `senha`, devolve um **JWT** com expiração configurável (default: 1h).
+
 ### Endpoints de apoio (vindos da Aula 2)
 
 - Operações matemáticas em 3 formatos (path params, query params, Pydantic `BaseModel`)
@@ -22,9 +26,10 @@ Ambos usam **Groq + Llama 3.1** com `response_format=json_object` para garantir 
 ## Boas práticas aplicadas
 
 - ✅ **Versionamento de API** com prefixo `/api/v1/`
-- ✅ **Autenticação Bearer Token** via header `Authorization: Bearer <token>`
+- ✅ **Autenticação JWT real** com login → token assinado → expiração
 - ✅ **Validação Pydantic** com `Field` (limites de tamanho, descrição, exemplos)
 - ✅ **`response_model`** declarado em todos os endpoints
+- ✅ **`responses={...}`** documentando 200/401/422/500 no Swagger
 - ✅ **Enum** para conjuntos fechados (áreas do Direito, tipos de operação)
 - ✅ **Exception handlers globais** padronizando 422, 401, 500 em JSON consistente
 - ✅ **Logging estruturado** com rotação automática (console + `app.log` + `erros.log`)
@@ -57,8 +62,23 @@ Ambos usam **Groq + Llama 3.1** com `response_format=json_object` para garantir 
 
    ```env
    GROQ_API_KEY=gsk_sua_chave_groq_aqui
-   API_TOKEN=defina_um_token_qualquer
+   JWT_SECRET=string_aleatoria_de_no_minimo_32_caracteres
+   JWT_EXPIRA_SEGUNDOS=3600
    ```
+
+   > 💡 **`JWT_SECRET`**: use qualquer string longa e imprevisível. Em produção, gerar com `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+
+## Usuários cadastrados (didático)
+
+Os usuários e senhas estão **hardcoded** em `api/utils.py` para fins didáticos:
+
+| Usuário | Senha |
+|---|---|
+| `felipe` | `senha_felipe_123` |
+| `professor` | `senha_prof_456` |
+| `edson` | `senha_edson_789` |
+
+> ⚠️ **Em produção**, essa lista viria de um banco de dados com senhas hasheadas (bcrypt/argon2). Aqui é didático para que o avaliador possa testar sem cadastro.
 
 ## Executar localmente
 
@@ -76,19 +96,43 @@ A aplicação fica disponível em:
 | <http://127.0.0.1:8000/redoc> | Redoc (documentação alternativa) |
 | <http://127.0.0.1:8000/openapi.json> | Especificação OpenAPI bruta |
 
-### Como autenticar no Swagger
+## Fluxo de autenticação (JWT)
+
+### Pelo Swagger
 
 1. Abra <http://127.0.0.1:8000/docs>
-2. Clique no botão **Authorize** (cadeado, canto superior direito)
-3. Cole o valor do `API_TOKEN` configurado no `.env` (campo "Value")
-4. **Authorize** → **Close**
-5. Todos os endpoints sob `/api/v1/` agora vão receber o header automaticamente
+2. Expanda **`POST /api/v1/auth/token`** → **Try it out**
+3. Preencha:
+   ```json
+   {
+     "usuario": "felipe",
+     "senha": "senha_felipe_123"
+   }
+   ```
+4. **Execute**. Copie o `access_token` retornado (string enorme começando com `eyJ...`).
+5. Clique no botão **Authorize** (cadeado, topo direito) e cole o `access_token` no campo "Value".
+6. **Authorize** → **Close**.
+7. Pronto. Todas as demais rotas sob `/api/v1/` passam a aceitar o header `Authorization: Bearer <JWT>` automaticamente.
 
-### Como autenticar via `curl` (PowerShell)
+> 🕐 O JWT expira em **1 hora** (configurável em `JWT_EXPIRA_SEGUNDOS`). Quando expirar, repita o login.
+
+### Via `curl` (PowerShell)
+
+**1. Fazer login e capturar o token:**
+
+```powershell
+$resposta = curl.exe -s -X POST "http://127.0.0.1:8000/api/v1/auth/token" `
+  -H "Content-Type: application/json" `
+  -d '{"usuario": "felipe", "senha": "senha_felipe_123"}'
+
+$token = ($resposta | ConvertFrom-Json).access_token
+```
+
+**2. Usar o token em uma rota protegida:**
 
 ```powershell
 curl.exe -X POST "http://127.0.0.1:8000/api/v1/juridico/classificar_peticao" `
-  -H "Authorization: Bearer SEU_TOKEN_AQUI" `
+  -H "Authorization: Bearer $token" `
   -H "Content-Type: application/json" `
   -d '{"texto": "Excelentissimo Senhor Doutor Juiz de Direito da Vara do Trabalho..."}'
 ```
@@ -101,8 +145,9 @@ curl.exe -X POST "http://127.0.0.1:8000/api/v1/juridico/classificar_peticao" `
 |---|---|---|
 | GET | `/` | Status simples |
 | GET | `/teste` | Hello World |
+| POST | `/api/v1/auth/token` | Login (devolve JWT) |
 
-### Sob `/api/v1/` (exigem Bearer Token)
+### Sob `/api/v1/` (exigem JWT no header)
 
 #### Jurídico (endpoints do trabalho final)
 
@@ -132,7 +177,7 @@ curl.exe -X POST "http://127.0.0.1:8000/api/v1/juridico/classificar_peticao" `
 
 ```http
 POST /api/v1/juridico/classificar_peticao HTTP/1.1
-Authorization: Bearer SEU_TOKEN
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 Content-Type: application/json
 
 {
@@ -155,9 +200,12 @@ Content-Type: application/json
 |---|---|---|
 | 200 | OK | Requisição bem-sucedida |
 | 201 | Created | Sucesso em `/operacoes/soma/v3` |
-| 401 | Unauthorized | Token Bearer ausente ou inválido |
-| 422 | Unprocessable Entity | Falha de validação Pydantic (texto curto demais, tipo errado, etc.) |
+| 400 | Bad Request | Regra de negócio violada (divisão por zero, número negativo) |
+| 401 | Unauthorized | JWT ausente, inválido ou expirado |
+| 422 | Unprocessable Entity | Falha de validação Pydantic (texto curto demais, tipo errado) |
 | 500 | Internal Server Error | Erro inesperado — sempre registrado em `logs/erros.log` |
+
+Cada endpoint declara explicitamente seus códigos de resposta via `responses={...}` no decorator, e o Swagger renderiza todos com descrição.
 
 ## Logs
 
@@ -167,12 +215,13 @@ A API escreve em três destinos simultaneamente:
 - **`logs/app.log`** — registro completo (rotação automática: 1 MB × 5 backups)
 - **`logs/erros.log`** — apenas eventos `ERROR` ou superior, para auditoria
 
-A pasta `logs/` é criada automaticamente no primeiro `boot` e está ignorada pelo Git.
+A pasta `logs/` é criada automaticamente no primeiro boot e está ignorada pelo Git.
 
 ## Stack
 
 - **FastAPI** — framework web
 - **Pydantic** — validação de dados
+- **PyJWT** — geração/validação de tokens JWT
 - **uv** — gerenciador de pacotes
 - **Groq + Llama 3.1** — LLM para classificação e extração
 - **python-dotenv** — variáveis de ambiente
@@ -185,10 +234,11 @@ pos_t2_aula_fastapi/
 ├── api/
 │   ├── main.py                       # instancia FastAPI, exception handlers, include_router
 │   ├── models.py                     # BaseModels e Enums (Pydantic)
-│   ├── utils.py                      # logger, autenticação Bearer, gateway da LLM
+│   ├── utils.py                      # logger, JWT, autenticação, gateway da LLM
 │   ├── docs/
 │   │   └── padroes_de_desenvolvimento.md
 │   └── routers/
+│       ├── auth_router.py            # login → JWT
 │       ├── juridico_router.py        # classificar_peticao + extrair_pedidos
 │       ├── operacoes_router.py       # somas e operação matemática genérica
 │       └── llm_router.py             # gerar_historia (deprecated)
