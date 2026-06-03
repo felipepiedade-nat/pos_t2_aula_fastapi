@@ -157,6 +157,11 @@ ENV/
 env.bak/
 venv.bak/
 
+# Logs gerados em runtime
+logs/
+*.log
+
+
 # Spyder project settings
 .spyderproject
 .spyproject
