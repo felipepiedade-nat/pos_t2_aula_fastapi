@@ -8,10 +8,21 @@ API educacional desenvolvida na disciplina **Construção de APIs para IA** da P
 
 ### Endpoints de IA do trabalho final
 
-- **`POST /api/v1/juridico/classificar_peticao`** — recebe o texto de uma petição inicial e classifica em uma das 15 áreas do Direito brasileiro (Enum), devolvendo a área identificada + justificativa.
-- **`POST /api/v1/juridico/extrair_pedidos`** — recebe o texto de uma petição inicial e devolve a lista objetiva dos pedidos formulados ao juiz.
+Cada operação (classificar e extrair) tem **duas versões coexistindo**, demonstrando versionamento real de API:
 
-Ambos usam **Groq + Llama 3.1** com `response_format=json_object` para garantir saída JSON sintaticamente válida.
+**v1 — texto colado** (JSON puro):
+
+- `POST /api/v1/juridico/classificar_peticao` — classifica em 1 das 15 áreas do Direito
+- `POST /api/v1/juridico/extrair_pedidos` — lista objetiva dos pedidos
+
+**v2 — upload de arquivo** (multipart/form-data, aceita **.pdf** ou **.docx**):
+
+- `POST /api/v2/juridico/classificar_peticao` — mesma classificação, a partir do arquivo
+- `POST /api/v2/juridico/extrair_pedidos` — mesma extração, a partir do arquivo
+
+Limites do v2: **5 MB** por arquivo, **50 páginas** (PDF), entre **50 e 20.000 caracteres** extraídos. PDFs escaneados (imagem, sem texto extraível) são rejeitados com 422.
+
+Todos usam **Groq + Llama 3.1** com `response_format=json_object` para garantir saída JSON sintaticamente válida.
 
 ### Endpoint de autenticação
 
@@ -25,7 +36,8 @@ Ambos usam **Groq + Llama 3.1** com `response_format=json_object` para garantir 
 
 ## Boas práticas aplicadas
 
-- ✅ **Versionamento de API** com prefixo `/api/v1/`
+- ✅ **Versionamento real** com `v1` (texto) e `v2` (upload de arquivo) coexistindo
+- ✅ **Upload de arquivos** (PDF/DOCX) com limites de tamanho, páginas e caracteres
 - ✅ **Autenticação JWT real** com login → token assinado → expiração
 - ✅ **Validação Pydantic** com `Field` (limites de tamanho, descrição, exemplos)
 - ✅ **`response_model`** declarado em todos os endpoints
@@ -148,12 +160,19 @@ curl.exe -X POST "http://127.0.0.1:8000/api/v1/juridico/classificar_peticao" `
 
 ### Sob `/api/v1/` (exigem JWT no header)
 
-#### Jurídico (endpoints do trabalho final)
+#### Jurídico v1 — texto colado (endpoints do trabalho final)
 
 | Método | Endpoint | Descrição |
 |---|---|---|
-| POST | `/api/v1/juridico/classificar_peticao` | Classifica uma petição em 1 das 15 áreas do Direito |
-| POST | `/api/v1/juridico/extrair_pedidos` | Extrai a lista de pedidos formulados na petição |
+| POST | `/api/v1/juridico/classificar_peticao` | Classifica petição (texto JSON) em 1 das 15 áreas |
+| POST | `/api/v1/juridico/extrair_pedidos` | Extrai pedidos (texto JSON) |
+
+#### Jurídico v2 — upload PDF/DOCX (endpoints do trabalho final)
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| POST | `/api/v2/juridico/classificar_peticao` | Classifica petição via upload (.pdf ou .docx) |
+| POST | `/api/v2/juridico/extrair_pedidos` | Extrai pedidos via upload (.pdf ou .docx) |
 
 #### Operações matemáticas (Aula 2)
 
@@ -193,6 +212,22 @@ Content-Type: application/json
 }
 ```
 
+## Exemplo de uso — classificar via upload de arquivo (v2)
+
+**Pelo Swagger:**
+
+1. Expanda `POST /api/v2/juridico/classificar_peticao` → "Try it out"
+2. No campo `arquivo`, clique em **Choose File** e selecione um `.pdf` ou `.docx`
+3. **Execute** — a API extrai o texto do arquivo e devolve a classificação
+
+**Via `curl` (PowerShell):**
+
+```powershell
+curl.exe -X POST "http://127.0.0.1:8000/api/v2/juridico/classificar_peticao" `
+  -H "Authorization: Bearer $token" `
+  -F "arquivo=@C:\caminho\para\peticao.pdf"
+```
+
 ## Códigos de resposta
 
 | Código | Significado | Quando aparece |
@@ -201,7 +236,8 @@ Content-Type: application/json
 | 201 | Created | Sucesso em `/operacoes/soma/v3` |
 | 400 | Bad Request | Regra de negócio violada (divisão por zero, número negativo) |
 | 401 | Unauthorized | JWT ausente, inválido ou expirado |
-| 422 | Unprocessable Entity | Falha de validação Pydantic (texto curto demais, tipo errado) |
+| 413 | Payload Too Large | Arquivo enviado no v2 excede 5 MB |
+| 422 | Unprocessable Entity | Validação Pydantic, extensão não suportada, PDF sem texto, arquivo vazio |
 | 500 | Internal Server Error | Erro inesperado — sempre registrado em `logs/erros.log` |
 
 Cada endpoint declara explicitamente seus códigos de resposta via `responses={...}` no decorator, e o Swagger renderiza todos com descrição.
@@ -223,6 +259,8 @@ A pasta `logs/` é criada automaticamente no primeiro boot e está ignorada pelo
 - **PyJWT** — geração/validação de tokens JWT
 - **uv** — gerenciador de pacotes
 - **Groq + Llama 3.1** — LLM para classificação e extração
+- **pypdf** — extração de texto de PDF
+- **python-docx** — extração de texto de DOCX
 - **python-dotenv** — variáveis de ambiente
 - **Ruff** — linter e formatter
 
