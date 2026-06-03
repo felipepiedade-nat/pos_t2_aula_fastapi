@@ -8,10 +8,13 @@ dependencies = [
     "fastapi[standard]>=0.136.3",
     "groq>=1.2.0",
     "pyjwt>=2.13.0",
+    "pypdf>=6.12.2",
+    "python-docx>=1.2.0",
     "python-dotenv>=1.0.0",
 ]
 
 [dependency-groups]
 dev = [
+    "reportlab>=4.5.1",
     "ruff>=0.6.0",
 ]
