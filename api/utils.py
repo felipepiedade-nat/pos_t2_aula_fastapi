@@ -16,7 +16,28 @@ from pypdf import PdfReader
 
 load_dotenv(find_dotenv())
 
-JWT_SECRET = os.getenv("JWT_SECRET", "")
+
+def _validar_env_obrigatorio() -> None:
+    """Falha rápido se variáveis críticas estiverem faltando ou vazias.
+
+    Roda na importação do módulo. Se ``JWT_SECRET`` ou ``GROQ_API_KEY``
+    não estiverem no ambiente, levanta ``RuntimeError`` com instrução
+    apontando para o ``.env.sample``.
+    """
+    obrigatorias = ["JWT_SECRET", "GROQ_API_KEY"]
+    faltando = [v for v in obrigatorias if not os.getenv(v)]
+    if faltando:
+        raise RuntimeError(
+            "Variáveis de ambiente obrigatórias faltando ou vazias: "
+            f"{', '.join(faltando)}. "
+            "Copie o arquivo .env.sample para .env e preencha os valores. "
+            "Veja a seção 'Configurando variáveis de ambiente' no README."
+        )
+
+
+_validar_env_obrigatorio()
+
+JWT_SECRET = os.getenv("JWT_SECRET")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRA_SEGUNDOS = int(os.getenv("JWT_EXPIRA_SEGUNDOS", "3600"))
 
