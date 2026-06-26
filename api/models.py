@@ -91,8 +91,8 @@ class PeticaoInput(BaseModel):
     texto: str = Field(
         ...,
         min_length=50,
-        max_length=20_000,
-        description="Conteúdo textual da petição a ser analisada (50-20000 caracteres)",
+        max_length=12_000,
+        description="Conteúdo textual da petição a ser analisada (50-12000 caracteres)",
         examples=[
             "Excelentíssimo Senhor Doutor Juiz de Direito da Vara do Trabalho. "
             "O reclamante foi demitido sem justa causa em 10/03/2025 após 3 anos "
@@ -120,4 +120,34 @@ class PedidosOutput(BaseModel):
     pedidos: list[str] = Field(
         ...,
         description="Cada item é um pedido em linguagem objetiva",
+    )
+
+
+class TriagemTrabalhistaOutput(BaseModel):
+    """Triagem estruturada de uma petição inicial trabalhista.
+
+    Separa o conteúdo em três eixos: temas da fundamentação, direitos
+    materiais pleiteados e requerimentos processuais/preliminares.
+    """
+
+    temas: list[str] = Field(
+        ...,
+        description=(
+            "Títulos dos temas tratados na fundamentação "
+            "(ex: 'Do Contrato de Trabalho', 'Da Rescisão Indireta')"
+        ),
+    )
+    direitos_trabalhistas: list[str] = Field(
+        ...,
+        description=(
+            "Direitos materiais pleiteados "
+            "(ex: 'Adicional de insalubridade 40%', 'Saldo de salário')"
+        ),
+    )
+    requerimentos_preliminares: list[str] = Field(
+        ...,
+        description=(
+            "Requerimentos processuais, preliminares ou de rito "
+            "(ex: 'Juízo 100% Digital', 'Justiça Gratuita')"
+        ),
     )

@@ -5,6 +5,7 @@ from models import (
     ClassificacaoOutput,
     PedidosOutput,
     PeticaoInput,
+    TriagemTrabalhistaOutput,
 )
 from utils import (
     RESPOSTAS_PROTEGIDAS,
@@ -88,6 +89,55 @@ def _extrair_pedidos(texto: str) -> PedidosOutput:
     return PedidosOutput(quantidade_pedidos=len(pedidos), pedidos=pedidos)
 
 
+def _lista_de_strings(valor) -> list[str]:
+    """Normaliza um campo da resposta da LLM para list[str] limpa."""
+    if not isinstance(valor, list):
+        return []
+    return [str(item).strip() for item in valor if str(item).strip()]
+
+
+def _triagem_trabalhista(texto: str) -> TriagemTrabalhistaOutput:
+    """Faz a triagem de uma petição trabalhista via LLM.
+
+    Separa o conteúdo em temas da fundamentação, direitos materiais
+    pleiteados e requerimentos processuais/preliminares.
+    """
+    prompt = (
+        "Você é um assistente especializado em Processo do Trabalho brasileiro. "
+        "Sua tarefa é ler a petição inicial abaixo e fazer a triagem do seu "
+        "conteúdo com precisão.\n\n"
+        "Extraia estritamente:\n"
+        "1. temas: os títulos dos temas tratados na fundamentação "
+        "(ex: 'Do Contrato de Trabalho', 'Da Rescisão Indireta').\n"
+        "2. direitos_trabalhistas: os direitos materiais/pedidos principais "
+        "(ex: 'Adicional de insalubridade 40%', 'Saldo de salário').\n"
+        "3. requerimentos_preliminares: os requerimentos processuais, "
+        "preliminares ou de rito (ex: 'Juízo 100% Digital', 'Justiça Gratuita').\n\n"
+        "Não inclua dados contratuais gerais nem pontos de controvérsia. "
+        "Se algum eixo não tiver itens, devolva lista vazia.\n\n"
+        "Responda APENAS com um objeto JSON com este formato exato:\n"
+        '{"temas": [...], "direitos_trabalhistas": [...], '
+        '"requerimentos_preliminares": [...]}\n\n'
+        f"Texto da petição:\n---\n{texto}\n---"
+    )
+
+    resposta = execute_prompt_json(prompt)
+    triagem = TriagemTrabalhistaOutput(
+        temas=_lista_de_strings(resposta.get("temas")),
+        direitos_trabalhistas=_lista_de_strings(resposta.get("direitos_trabalhistas")),
+        requerimentos_preliminares=_lista_de_strings(
+            resposta.get("requerimentos_preliminares")
+        ),
+    )
+    logger.info(
+        "Triagem trabalhista: "
+        f"{len(triagem.temas)} temas, "
+        f"{len(triagem.direitos_trabalhistas)} direitos, "
+        f"{len(triagem.requerimentos_preliminares)} requerimentos"
+    )
+    return triagem
+
+
 @router_v1.post(
     "/classificar_peticao",
     summary="Classifica uma petição por área do Direito (texto colado)",
@@ -134,7 +184,7 @@ def extrair_pedidos_texto(peticao: PeticaoInput) -> PedidosOutput:
     description=(
         "Recebe o arquivo da petição (.pdf ou .docx) via multipart/form-data, "
         "extrai o texto e classifica em uma das 15 áreas do Direito.\n\n"
-        "Limites: 5 MB por arquivo, 50 páginas (PDF), entre 50 e 20.000 caracteres "
+        "Limites: 5 MB por arquivo, 50 páginas (PDF), entre 50 e 12.000 caracteres "
         "extraídos. PDFs escaneados (imagem, sem texto extraível) são rejeitados com 422."
     ),
     response_model=ClassificacaoOutput,
@@ -160,7 +210,7 @@ async def classificar_peticao_arquivo(
     description=(
         "Recebe o arquivo da petição (.pdf ou .docx) via multipart/form-data, "
         "extrai o texto e devolve a lista objetiva dos pedidos formulados.\n\n"
-        "Limites: 5 MB por arquivo, 50 páginas (PDF), entre 50 e 20.000 caracteres extraídos."
+        "Limites: 5 MB por arquivo, 50 páginas (PDF), entre 50 e 12.000 caracteres extraídos."
     ),
     response_model=PedidosOutput,
     status_code=status.HTTP_200_OK,
@@ -177,3 +227,54 @@ async def extrair_pedidos_arquivo(
     logger.info(f"v2 extrair_pedidos - arquivo: {arquivo.filename}")
     texto = await extrair_texto_arquivo(arquivo)
     return _extrair_pedidos(texto)
+
+
+@router_v1.post(
+    "/triagem_peticao",
+    summary="Triagem trabalhista de uma petição (texto colado)",
+    description=(
+        "Recebe o texto de uma petição inicial trabalhista em JSON e devolve "
+        "a triagem em três eixos: temas da fundamentação, direitos materiais "
+        "pleiteados e requerimentos preliminares/processuais.\n\n"
+        "Endpoint contribuído por Edison (colega de turma)."
+    ),
+    response_model=TriagemTrabalhistaOutput,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Triagem realizada com sucesso"},
+        **RESPOSTAS_PROTEGIDAS,
+    },
+)
+def triagem_peticao_texto(peticao: PeticaoInput) -> TriagemTrabalhistaOutput:
+    """Endpoint v1: recebe texto colado, faz a triagem trabalhista."""
+    logger.info(f"v1 triagem_peticao - {len(peticao.texto)} chars")
+    return _triagem_trabalhista(peticao.texto)
+
+
+@router_v2.post(
+    "/triagem_peticao",
+    summary="Triagem trabalhista de uma petição (upload PDF ou DOCX)",
+    description=(
+        "Recebe o arquivo da petição (.pdf ou .docx) via multipart/form-data, "
+        "extrai o texto e devolve a triagem em três eixos: temas da "
+        "fundamentação, direitos materiais pleiteados e requerimentos "
+        "preliminares/processuais.\n\n"
+        "Limites: 5 MB por arquivo, 50 páginas (PDF), entre 50 e 12.000 "
+        "caracteres extraídos.\n\n"
+        "Endpoint contribuído por Edison (colega de turma)."
+    ),
+    response_model=TriagemTrabalhistaOutput,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Triagem realizada com sucesso"},
+        413: {"description": "Arquivo excede 5 MB"},
+        **RESPOSTAS_PROTEGIDAS,
+    },
+)
+async def triagem_peticao_arquivo(
+    arquivo: UploadFile = File(..., description="Petição em .pdf ou .docx"),
+) -> TriagemTrabalhistaOutput:
+    """Endpoint v2: recebe upload do arquivo, extrai texto, faz a triagem."""
+    logger.info(f"v2 triagem_peticao - arquivo: {arquivo.filename}")
+    texto = await extrair_texto_arquivo(arquivo)
+    return _triagem_trabalhista(texto)

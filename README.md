@@ -8,17 +8,21 @@ API educacional desenvolvida na disciplina **Construção de APIs para IA** da P
 
 ### Endpoints de IA do trabalho final
 
-Cada operação (classificar e extrair) tem **duas versões coexistindo**, demonstrando versionamento real de API:
+Cada operação (classificar, extrair e triagem) tem **duas versões coexistindo**, demonstrando versionamento real de API:
 
 **v1 — texto colado** (JSON puro):
 
 - `POST /api/v1/juridico/classificar_peticao` — classifica em 1 das 15 áreas do Direito
 - `POST /api/v1/juridico/extrair_pedidos` — lista objetiva dos pedidos
+- `POST /api/v1/juridico/triagem_peticao` — triagem trabalhista: temas, direitos materiais e requerimentos preliminares
 
 **v2 — upload de arquivo** (multipart/form-data, aceita **.pdf** ou **.docx**):
 
 - `POST /api/v2/juridico/classificar_peticao` — mesma classificação, a partir do arquivo
 - `POST /api/v2/juridico/extrair_pedidos` — mesma extração, a partir do arquivo
+- `POST /api/v2/juridico/triagem_peticao` — mesma triagem, a partir do arquivo
+
+> A triagem trabalhista (`triagem_peticao`) foi contribuída por **Edison**, colega de turma, e adaptada ao padrão modular do projeto (mesmo gateway da LLM, autenticação JWT e tratamento de erros dos demais endpoints jurídicos).
 
 Limites do v2: **5 MB** por arquivo, **50 páginas** (PDF), entre **50 e 12.000 caracteres** extraídos. Textos maiores são truncados em 12.000 caracteres para caber no limite de tokens/min do plano gratuito da Groq. PDFs escaneados (imagem, sem texto extraível) são rejeitados com 422.
 
@@ -200,6 +204,7 @@ curl.exe -X POST "http://127.0.0.1:8000/api/v1/juridico/classificar_peticao" `
 |---|---|---|
 | POST | `/api/v1/juridico/classificar_peticao` | Classifica petição (texto JSON) em 1 das 15 áreas |
 | POST | `/api/v1/juridico/extrair_pedidos` | Extrai pedidos (texto JSON) |
+| POST | `/api/v1/juridico/triagem_peticao` | Triagem trabalhista: temas, direitos e requerimentos (texto JSON) |
 
 #### Jurídico v2 — upload PDF/DOCX (endpoints do trabalho final)
 
@@ -207,6 +212,7 @@ curl.exe -X POST "http://127.0.0.1:8000/api/v1/juridico/classificar_peticao" `
 |---|---|---|
 | POST | `/api/v2/juridico/classificar_peticao` | Classifica petição via upload (.pdf ou .docx) |
 | POST | `/api/v2/juridico/extrair_pedidos` | Extrai pedidos via upload (.pdf ou .docx) |
+| POST | `/api/v2/juridico/triagem_peticao` | Triagem trabalhista via upload (.pdf ou .docx) |
 
 #### Operações matemáticas (Aula 2)
 
@@ -262,6 +268,32 @@ curl.exe -X POST "http://127.0.0.1:8000/api/v2/juridico/classificar_peticao" `
   -F "arquivo=@C:\caminho\para\peticao.pdf"
 ```
 
+## Exemplo de uso — triagem trabalhista (v1)
+
+**Request:**
+
+```http
+POST /api/v1/juridico/triagem_peticao HTTP/1.1
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+
+{
+  "texto": "Excelentíssimo Senhor Doutor Juiz do Trabalho. JOÃO DA SILVA propõe RECLAMAÇÃO TRABALHISTA em face de TRANSPORTES XYZ LTDA. Da rescisão indireta: o reclamante laborava em condições insalubres sem EPI. Requer-se a concessão da justiça gratuita e o processamento sob o Juízo 100% Digital. Pleiteia-se adicional de insalubridade em grau máximo (40%) e o saldo de salário do mês da rescisão."
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "temas": ["Da Rescisão Indireta", "Das Condições de Trabalho"],
+  "direitos_trabalhistas": ["Adicional de insalubridade 40%", "Saldo de salário"],
+  "requerimentos_preliminares": ["Justiça Gratuita", "Juízo 100% Digital"]
+}
+```
+
+> 💡 A pasta [`samples/`](samples/) traz uma **petição trabalhista real de exemplo** (`peticao-trabalhista-exemplo.md`), cedida pelo Edison, para testar os endpoints jurídicos. Cole o conteúdo no campo `texto` (v1) ou salve como `.docx`/`.pdf` para o upload (v2).
+
 ## Códigos de resposta
 
 | Código | Significado | Quando aparece |
@@ -312,7 +344,7 @@ pos_t2_aula_fastapi/
 │   │   └── padroes_de_desenvolvimento.md
 │   └── routers/
 │       ├── auth_router.py            # login → JWT
-│       ├── juridico_router.py        # classificar_peticao + extrair_pedidos
+│       ├── juridico_router.py        # classificar_peticao + extrair_pedidos + triagem_peticao
 │       ├── operacoes_router.py       # somas e operação matemática genérica
 │       └── llm_router.py             # gerar_historia (deprecated)
 ├── logs/                             # gerada em runtime (não versionada)
