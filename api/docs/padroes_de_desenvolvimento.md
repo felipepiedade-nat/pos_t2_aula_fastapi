@@ -2,25 +2,7 @@
 
 Este documento centraliza as convenções adotadas no repositório.
 
-## Estrutura de pastas
-
-```
-pos_t2_aula_fastapi/
-├── api/
-│   ├── main.py             # instancia FastAPI + include_router
-│   ├── models.py           # BaseModels (Pydantic) e Enums
-│   ├── utils.py            # logger, autenticação, gateway da LLM
-│   ├── docs/               # documentação interna do código
-│   └── routers/
-│       ├── llm_router.py
-│       └── operacoes_router.py
-├── docs/                   # documentação do projeto (padrões, decisões)
-├── .env                    # segredos reais (ignorado pelo Git)
-├── .env.sample             # guia das variáveis (versionado)
-├── pyproject.toml
-├── README.md
-└── uv.lock
-```
+> A estrutura de pastas oficial fica no [README](../../README.md#estrutura-do-projeto).
 
 ## Princípio da responsabilidade única
 

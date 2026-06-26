@@ -25,13 +25,15 @@ app = FastAPI(
 
 - `POST /api/v1/juridico/classificar_peticao` — classifica em 1 das 15 áreas do Direito
 - `POST /api/v1/juridico/extrair_pedidos` — lista objetiva dos pedidos
+- `POST /api/v1/juridico/triagem_peticao` — triagem trabalhista (temas, direitos, requerimentos)
 
 **v2 — upload de arquivo PDF/DOCX (multipart/form-data):**
 
 - `POST /api/v2/juridico/classificar_peticao` — mesma classificação, mas a partir do arquivo
 - `POST /api/v2/juridico/extrair_pedidos` — mesma extração, mas a partir do arquivo
+- `POST /api/v2/juridico/triagem_peticao` — mesma triagem, mas a partir do arquivo
 
-Limites do v2: 5 MB, 50 páginas, 50–20.000 caracteres extraídos.
+Limites do v2: 5 MB, 50 páginas, 50–12.000 caracteres extraídos.
 
 ### Endpoints de apoio (Aula 2)
 
